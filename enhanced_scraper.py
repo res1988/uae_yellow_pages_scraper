@@ -2,17 +2,23 @@ from bs4 import BeautifulSoup
 import requests
 import sqlite3
 import hashlib
+import string
 
 conn = sqlite3.connect('yp.db')
 c = conn.cursor()
 
 # Create yellow pages table
-# c.execute('''CREATE TABLE IF NOT EXISTS y_pages_category_lookup 
-#         (category text)''')
-# c.execute('''DROP TABLE IF EXISTS y_pages''')
-# c.execute('''CREATE TABLE IF NOT EXISTS y_pages
-#              (id text primary key, category text, name text, name_url text, location text, emirate text, page_url)''')
-# conn.commit()s
+# table list is:
+# 1. y_pages_category_lookup
+# 2. y_pages
+def create_tables():
+    #c.execute('''DROP TABLE IF EXISTS y_pages_category_lookup''')
+    c.execute('''CREATE TABLE IF NOT EXISTS y_pages_category_lookup 
+            (category text, category_url text)''')
+    # c.execute('''DROP TABLE IF EXISTS y_pages''')
+    c.execute('''CREATE TABLE IF NOT EXISTS y_pages
+                (id text primary key, category text, name text, name_url text, location text, emirate text, page_url)''')
+    conn.commit()
 
 def get_url_content(main_url):
     r = requests.get(main_url)
@@ -54,16 +60,6 @@ def get_next_page(soup):
     except IndexError:
         return None
 
-# get the details from one web page
-emirate = 'uae'
-category = ['shopping-centres','theme-parks','water-parks','hotels']
-
-for cat in category:
-    print("getting category %s"%(cat))
-    main_url = 'https://www.yellowpages.ae/c/advs/{0}/{1}.html'.format(emirate, cat)
-    soup = get_url_content(main_url)
-    get_main_url_data(soup, main_url)
-
 #update location
 #update_yp_locations()
 
@@ -80,12 +76,39 @@ def update_yp_locations():
                 WHERE id = ? ''', (get_coordinates, dat[0]))
         conn.commit()
 
-update_yp_locations()    
+def build_category_lookup():
+    for letter in list(string.ascii_lowercase):
+        main_url = 'https://www.yellowpages.ae/categories-by-alphabet/{0}.html'.format(letter)
+        print(main_url)
+        soup = get_url_content(main_url)
+        for el in soup.find_all('span', {"class": "alp-c-m"}):
+            for a_tag in el.find_all('a'):
+                tag_url = a_tag['href']
+                tag_cat = a_tag['href'].split('/')[-1].split('.')[0]
+                c.execute("INSERT or REPLACE INTO y_pages_category_lookup VALUES (?,?)", 
+                ( tag_cat
+                , tag_url 
+                ))
+                conn.commit()
+
+# get the details from one web page
+emirate = 'uae'
+category = ['shopping-centres','theme-parks','water-parks','hotels']
+for cat in category:
+    print("getting category %s"%(cat))
+    main_url = 'https://www.yellowpages.ae/c/advs/{0}/{1}.html'.format(emirate, cat)
+    soup = get_url_content(main_url)
+    get_main_url_data(soup, main_url)
+
+update_yp_locations()
+
+
+
 print("process complete")
 
 
 #to do
-# get location details for each place
-# scroll through pages to get the other places
-# build category lookup
+# get location details for each place (done)
+# scroll through pages to get the other places (done)
+# build category lookup (done)
 # build company name lookup
